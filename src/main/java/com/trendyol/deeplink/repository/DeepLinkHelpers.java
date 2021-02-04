@@ -24,7 +24,7 @@ public class DeepLinkHelpers {
 		return value.substring(0, posA);
 	}
 	
-	static String between(String value, String a, String b) {
+	public static String between(String value, String a, String b) {
         // Return a substring between the two strings.
         int posA = value.indexOf(a);
         if (posA == -1) {

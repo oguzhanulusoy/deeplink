@@ -9,6 +9,8 @@ public class DeepLinkImpl implements DeepLinkRepository {
 
 	public static Logger logger = Logger.getLogger(DeepLinkImpl.class.getName());
 
+	public static final boolean isDebug = false;
+	
 	public String getDeepLinkRequest(String urlString) {
 		urlString = urlString.toLowerCase();
 		URL url = null;
@@ -16,22 +18,28 @@ public class DeepLinkImpl implements DeepLinkRepository {
 
 		try {
 			url = new URL(urlString);
-			logger.info(DeepLinkMessages.msg0005.format(url.toString()));
+			if (isDebug)
+				logger.info(DeepLinkMessages.msg0005.format(url.toString()));
 		} catch (Exception ex) {
-			logger.warning(ex.toString());
+			if (isDebug)
+				logger.warning(ex.toString());
 			System.out.print(ex.toString());
 		}
 
 		if (url != null && url.getHost().equals(DeepLinkConstants.HOST)) {
-			path = url.getPath();
-			return deepLinkConverter(path);
+			path = url.getFile();
+			String result = deepLinkConverter(path);
+			// write the data into ElasticSearch: { index: deepLinkRequests, dateTime, urlString, result }
+			return result;
 		} else {
-			logger.warning(DeepLinkConstants.INVALID);
+			if (isDebug) 
+				logger.warning(DeepLinkConstants.INVALID);
+			// write the data into ElasticSearch: { index: invalid, dateTime, urlString }
 			return DeepLinkConstants.INVALID;
 		}
 	}
 
-	private String deepLinkConverter(String path) {
+	public String deepLinkConverter(String path) {
 
 		// If it contains product or search prefix, it should be divided through
 		// elements
@@ -45,7 +53,10 @@ public class DeepLinkImpl implements DeepLinkRepository {
 				String productId = "", boutiqueId = "", merchantId = "";
 
 				// Every product has product detail page, it is located before -p-
-				productId = DeepLinkHelpers.before(productUrl, "?");
+				productId = productUrl;
+				if (productUrl.contains("?")) {
+					productId = DeepLinkHelpers.before(productUrl, "?");
+				}
 
 				// If there is boutiqueId, we should retrieve appropriate data
 				if (productUrl.contains(DeepLinkConstants.PRODUCT_BOUTIQUEID)) {
@@ -79,49 +90,65 @@ public class DeepLinkImpl implements DeepLinkRepository {
 		return DeepLinkConstants.INVALID;
 	}
 
-	private String createDeepUrl() {
+	public String createDeepUrl() {
 		StringBuilder result = new StringBuilder();
 		result.append(DeepLinkConstants.DEEP_LINK_HOME_PAGE);
-		logger.info(DeepLinkMessages.msg0004.format(result.toString()));
+		if (isDebug)
+			logger.info(DeepLinkMessages.msg0004.format(result.toString()));
 		return result.toString();
 	}
 
-	private String createDeepUrl(String query) {
+	public String createDeepUrl(String query) {
 		StringBuilder result = new StringBuilder();
 		result.append(DeepLinkConstants.DEEP_LINK_SEARCH_PAGE);
 		result.append(query);
-		logger.info(DeepLinkMessages.msg0004.format(result.toString()));
+		if (isDebug)
+			logger.info(DeepLinkMessages.msg0004.format(result.toString()));
 		return result.toString();
 	}
 
-	private String createDeepUrl(String productId, String boutiqueId, String merchantId) {
+	public String createDeepUrl(String productId, String boutiqueId, String merchantId) {
 		StringBuilder result = new StringBuilder();
 		result.append(DeepLinkConstants.DEEP_LINK_PRODUCT_PAGE);
 
 		if (!productId.isEmpty()) {
 			result.append(DeepLinkConstants.DEEP_LINK_TAG_CONTENT_ID + productId);
 		}
-		if (!boutiqueId.isEmpty()) {
+		if (!boutiqueId.isEmpty() && merchantId.isEmpty()) {
+			result.append(DeepLinkConstants.AND_PREFIX);
 			result.append(DeepLinkConstants.DEEP_LINK_TAG_CAMPAIGN_ID + boutiqueId);
 		}
-		if (!merchantId.isEmpty()) {
+		if (!merchantId.isEmpty() && boutiqueId.isEmpty()) {
+			result.append(DeepLinkConstants.AND_PREFIX);
 			result.append(DeepLinkConstants.DEEP_LINK_TAG_MERCHANT_ID + merchantId);
 		}
-		logger.info(DeepLinkMessages.msg0004.format(result.toString()));
+		if(!merchantId.isEmpty() && !boutiqueId.isEmpty()) {
+			result.append(DeepLinkConstants.AND_PREFIX);
+			result.append(DeepLinkConstants.DEEP_LINK_TAG_CAMPAIGN_ID + boutiqueId);
+			result.append(DeepLinkConstants.AND_PREFIX);
+			result.append(DeepLinkConstants.DEEP_LINK_TAG_MERCHANT_ID + merchantId);
+		}
+		if (isDebug)
+			logger.info(DeepLinkMessages.msg0004.format(result.toString()));
 		return result.toString();
 	}
 
 	public String getWebUrlRequest(String urlString) {
-		logger.info(DeepLinkMessages.msg0002.format(urlString));
-		if (urlString.contains(DeepLinkConstants.DEEP_LINK_HOST)) {
-			return webUrlConverter(urlString);
+		if (isDebug)
+			logger.info(DeepLinkMessages.msg0002.format(urlString));
+		if (urlString != null && urlString.contains(DeepLinkConstants.DEEP_LINK_HOST)) {
+			String result = webUrlConverter(urlString);
+			// write the data into ElasticSearch: { index: webUrlRequests, dateTime, urlString, result }
+			return result;
 		} else {
-			logger.warning(DeepLinkMessages.msg0003.format(urlString));
+			if (isDebug)
+				logger.warning(DeepLinkMessages.msg0003.format(urlString));
+			// write the data into ElasticSearch: { index: invalid, dateTime, urlString }
 			return DeepLinkConstants.INVALID;
 		}
 	}
 
-	private String webUrlConverter(String path) {
+	public String webUrlConverter(String path) {
 
 		// Request= ty://?Page=Search&Query=elb
 		// Response= https://www.trendyol.com/tum--urunler?q=elb
@@ -130,7 +157,8 @@ public class DeepLinkImpl implements DeepLinkRepository {
 			StringBuilder result = new StringBuilder();
 			result.append(DeepLinkConstants.WEB_URL_SEARCH_PAGE);
 			result.append(query);
-			logger.info(DeepLinkMessages.msg0001.format(result.toString()));
+			if (isDebug)
+				logger.info(DeepLinkMessages.msg0001.format(result.toString()));
 			return result.toString();
 		}
 
@@ -161,31 +189,35 @@ public class DeepLinkImpl implements DeepLinkRepository {
 		// Request= ty://?Page=Favoriler
 		// Response= https://www.trendyol.com
 		else {
-			logger.info(DeepLinkMessages.msg0001.format(DeepLinkConstants.FULLY_HOST));
+			if (isDebug)
+				logger.info(DeepLinkMessages.msg0001.format(DeepLinkConstants.FULLY_HOST));
 			return DeepLinkConstants.FULLY_HOST;
 		}
 	}
 
-	private String createWebUrl(String contentId, String boutiqueId, String merchantId) {
+	public String createWebUrl(String contentId, String boutiqueId, String merchantId) {
 		StringBuilder result = new StringBuilder();
 		result.append(DeepLinkConstants.WEB_URL_PRODUCT_PAGE);
 
 		if (!contentId.isEmpty()) {
 			result.append(contentId);
-			result.append(DeepLinkConstants.PRODUCT_URL_PRODUCTID);
 		}
 		if (!boutiqueId.isEmpty() && merchantId.isEmpty()) {
-			result.append(DeepLinkConstants.DEEP_LINK_TAG_CAMPAIGN_ID + boutiqueId);
+			result.append(DeepLinkConstants.PRODUCT_URL_PRODUCTID);
+			result.append(DeepLinkConstants.WEB_URL_TAG_CAMPAIGN_ID + boutiqueId);
 		}
 		if (!merchantId.isEmpty() && boutiqueId.isEmpty()) {
-			result.append(DeepLinkConstants.DEEP_LINK_TAG_MERCHANT_ID + merchantId);
+			result.append(DeepLinkConstants.PRODUCT_URL_PRODUCTID);
+			result.append(DeepLinkConstants.WEB_URL_TAG_MERCHANT_ID + merchantId);
 		}
-		if (!(merchantId.isEmpty() && boutiqueId.isEmpty())) {
-			result.append(DeepLinkConstants.DEEP_LINK_TAG_CAMPAIGN_ID + boutiqueId);
+		if (!merchantId.isEmpty() && !boutiqueId.isEmpty()) {
+			result.append(DeepLinkConstants.PRODUCT_URL_PRODUCTID);
+			result.append(DeepLinkConstants.WEB_URL_TAG_CAMPAIGN_ID + boutiqueId);
 			result.append(DeepLinkConstants.AND_PREFIX);
-			result.append(DeepLinkConstants.DEEP_LINK_TAG_MERCHANT_ID + merchantId);
+			result.append(DeepLinkConstants.WEB_URL_TAG_MERCHANT_ID + merchantId);
 		}
-		logger.info(DeepLinkMessages.msg0001.format(result.toString()));
+		if (isDebug)
+			logger.info(DeepLinkMessages.msg0001.format(result.toString()));
 		return result.toString();
 	}
 }
